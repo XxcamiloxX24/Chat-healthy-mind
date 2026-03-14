@@ -43,6 +43,14 @@ module.exports = (io) => {
     // 2. GESTIÓN DE EVENTOS DE CONEXIÓN
     // ==========================================
     io.on('connection', (socket) => {
+        const userId = socket.user.id;
+        const role = socket.user.role;
+
+        const personalRoom = `${role}_${userId}`;
+        socket.join(personalRoom);
+
+        console.log(`👤 Usuario unido a su sala personal: ${personalRoom}`);
+
         console.log(`🔌 Nuevo cliente conectado: ${socket.id}`);
 
         // EVENTO: Unirse a un Chat

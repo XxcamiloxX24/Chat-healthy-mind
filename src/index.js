@@ -7,6 +7,7 @@ const { Server } = require('socket.io');
 const connectDB = require('./config/database');
 const chatRoutes = require('./routes/chatRoutes');
 const socketManager = require('./sockets/socketManager');
+const socketInstance = require('./sockets/socketInstance');
 
 // Inicializar App
 const app = express();
@@ -28,7 +29,7 @@ const io = new Server(server, {
         methods: ["GET", "POST"]
     }
 });
-
+socketInstance.init(io);
 socketManager(io);
 
 // Configuración básica para arrancar

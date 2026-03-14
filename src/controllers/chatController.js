@@ -1,6 +1,8 @@
 // src/controllers/chatController.js
 const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
+const socketInstance = require('../sockets/socketInstance');
+
 
 exports.createChatRoom = async (req, res) => {
     try {
@@ -31,6 +33,18 @@ exports.createChatRoom = async (req, res) => {
         });
 
         await conversation.save();
+
+        const io = socketInstance.getIO();
+
+        io.to(`psicologo_${psychologistId}`).emit('notification', {
+            type: 'NEW_APPOINTMENT',
+            title: 'Nueva solicitud de cita',
+            message: 'Un aprendiz ha solicitado una cita',
+            appointmentId: appointmentId,
+            createdAt: new Date()
+        });
+
+        console.log('🔔 Notificación enviada al psicólogo:', psychologistId);
 
         res.status(201).json({
             msg: 'Sala de chat creada exitosamente',
