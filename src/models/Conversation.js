@@ -19,6 +19,8 @@ const ConversationSchema = new mongoose.Schema({
         type: String, // Ejemplo: 'Sistemas', 'Confección'
         required: true
     },
+    apprenticeName: { type: String }, // Para mostrar en lista (opcional)
+    ficha: { type: String }, // Número de ficha (opcional)
     isActive: {
         type: Boolean,
         default: true // El chat nace activo
@@ -28,5 +30,8 @@ const ConversationSchema = new mongoose.Schema({
         default: Date.now
     }
 });
+
+ConversationSchema.index({ psychologistId: 1, createdAt: -1 });
+ConversationSchema.index({ apprenticeId: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Conversation', ConversationSchema);

@@ -2,80 +2,102 @@
 const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
 const socketInstance = require('../sockets/socketInstance');
+const logger = require('../utils/logger');
 
-
-exports.createChatRoom = async (req, res) => {
+exports.createChatRoom = async (req, res, next) => {
     try {
-        // Desestructuramos los datos que nos enviará .NET
-        const { appointmentId, psychologistId, apprenticeId, area } = req.body;
+        const psychologistId = req.user.id; // Del JWT (solo psicólogo puede crear)
+        const { appointmentId: bodyAppointmentId, apprenticeId, area, apprenticeName, ficha } = req.body;
 
-        // 1. Validar que lleguen los datos
-        if (!appointmentId || !psychologistId || !apprenticeId || !area) {
-            return res.status(400).json({ msg: 'Faltan datos obligatorios (IDs o Area)' });
+        if (!apprenticeId || !area) {
+            return res.status(400).json({ msg: 'Faltan datos obligatorios (apprenticeId, area)' });
         }
 
-        // 2. Verificar si la sala YA existe (para no duplicarla)
+        // appointmentId opcional: si no viene (chat directo), generamos uno único
+        const appointmentId = bodyAppointmentId ?? (900000000 + Math.floor(Date.now() / 1000) % 100000000);
+
         let conversation = await Conversation.findOne({ appointmentId });
 
         if (conversation) {
-            return res.status(200).json({ 
-                msg: 'La sala ya existía', 
-                roomId: conversation._id 
+            return res.status(200).json({
+                msg: 'La sala ya existía',
+                roomId: conversation._id,
+                appointmentId: conversation.appointmentId
             });
         }
 
-        // 3. Crear la nueva sala si no existe
         conversation = new Conversation({
-            appointmentId,    // cit_codigo
-            psychologistId,   // psi_codigo
-            apprenticeId,     // apr_codigo
-            area
+            appointmentId,
+            psychologistId,
+            apprenticeId: parseInt(apprenticeId, 10),
+            area,
+            ...(apprenticeName && { apprenticeName }),
+            ...(ficha && { ficha })
         });
 
         await conversation.save();
 
         const io = socketInstance.getIO();
 
-        io.to(`psicologo_${psychologistId}`).emit('notification', {
-            type: 'NEW_APPOINTMENT',
-            title: 'Nueva solicitud de cita',
-            message: 'Un aprendiz ha solicitado una cita',
-            appointmentId: appointmentId,
+        // Notificar al aprendiz (si está conectado). No requiere que esté en línea.
+        io.to(`Aprendiz_${apprenticeId}`).emit('notification', {
+            type: 'NEW_CHAT',
+            title: 'Nueva conversación',
+            message: 'Tu psicólogo ha iniciado una conversación contigo',
+            appointmentId,
             createdAt: new Date()
         });
 
-        console.log('🔔 Notificación enviada al psicólogo:', psychologistId);
+        logger.info('Sala creada. Notificación enviada al aprendiz:', apprenticeId);
 
         res.status(201).json({
             msg: 'Sala de chat creada exitosamente',
-            roomId: conversation._id
+            roomId: conversation._id,
+            appointmentId
         });
 
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ msg: 'Error en el servidor al crear sala' });
+        next(error);
     }
 };
 
-exports.getChatHistory = async (req, res) => {
+exports.getConversations = async (req, res, next) => {
     try {
-        const { appointmentId } = req.params; // Lo recibiremos por URL
+        const userId = req.user.id;
+        const role = req.user.role;
 
-        // A. Buscamos primero cuál es el ID interno de la conversación
-        const conversation = await Conversation.findOne({ appointmentId });
+        const filter = role === 'Psicologo'
+            ? { psychologistId: userId }
+            : role === 'Aprendiz'
+                ? { apprenticeId: userId }
+                : null;
 
-        if (!conversation) {
-            return res.status(404).json({ msg: 'No existe un chat para esta cita' });
+        if (!filter) {
+            return res.status(403).json({ error: 'Solo psicólogos y aprendices pueden ver conversaciones' });
         }
 
-        // B. Buscamos los mensajes que tengan ese conversationId
+        const conversations = await Conversation.find(filter)
+            .sort({ createdAt: -1 })
+            .lean();
+
+        res.json(conversations);
+    } catch (error) {
+        next(error);
+    }
+};
+
+exports.getChatHistory = async (req, res, next) => {
+    try {
+        // req.conversation ya viene del middleware requireChatParticipant
+        const conversation = req.conversation;
+
+        // Buscamos los mensajes que tengan ese conversationId
         const messages = await Message.find({ conversationId: conversation._id })
                                       .sort({ timestamp: 1 }); // 1 = Orden ascendente (más viejos primero)
 
         res.json(messages);
 
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ msg: 'Error al obtener historial' });
+        next(error);
     }
 };
