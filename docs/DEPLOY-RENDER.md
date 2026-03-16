@@ -61,4 +61,20 @@ Render suele definir `NODE_ENV=production`. No hace falta que lo añadas manualm
 
 ### Plan gratuito
 
-En el plan gratuito, el servicio puede dormirse tras ~15 min sin actividad. La primera petición después de eso puede tardar unos segundos en responder.
+En el plan gratuito, el servicio puede dormirse tras ~15 min sin actividad. La primera petición después de eso puede tardar 30–60 segundos en responder (cold start). El cliente Socket.io está configurado para reintentar hasta 10 veces con delays crecientes.
+
+---
+
+## 5. Resolución de problemas
+
+### Error "websocket is closed before the connection is established"
+- **CORS_ORIGINS**: Verifica que incluya exactamente `https://healthymind-psic.netlify.app` (sin `/` al final).
+- **Cold start**: Si el servicio estaba dormido, espera 30–60 s y recarga la página; el cliente reintentará la conexión.
+
+### Error 404 en /api/chat/...
+- Revisa que `VITE_CHAT_API_URL` en Netlify sea `https://chat-healthy-mind.onrender.com` (sin `/` al final, sin `/api`).
+- Tras cambiar variables de entorno en Netlify, haz un **nuevo deploy** para que se apliquen en el build.
+
+### "Error al crear la conversación"
+- Si es 401: el JWT puede estar expirado; cierra sesión y vuelve a iniciar.
+- Si es CORS: asegúrate de que la URL de Netlify esté en `CORS_ORIGINS` en Render.

@@ -1,0 +1,111 @@
+{
+  "info": {
+    "name": "Chat-HM API",
+    "description": "Colección para la API de Chat de HealthyMind (REST + Socket.io).\n\n**Autenticación:** Todas las rutas (excepto Health) requieren JWT emitido por la API principal (.NET).\n- Header: `Authorization: Bearer <token>` o `token: <token>`",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "appointmentId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
+        },
+        "description": "Comprueba que el servicio está en marcha. No requiere autenticación."
+      }
+    },
+    {
+      "name": "Chat",
+      "item": [
+        {
+          "name": "Crear sala (solo psicólogo)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"apprenticeId\": 1,\n  \"area\": \"General\",\n  \"appointmentId\": 12345,\n  \"apprenticeName\": \"Nombre Aprendiz\",\n  \"ficha\": \"2558937\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/room",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "chat", "room"]
+            },
+            "description": "Crea una sala de chat. Solo usuarios con rol Psicologo.\n\n**Body:**\n- apprenticeId (obligatorio)\n- area (obligatorio)\n- appointmentId (opcional, se genera si no se envía)\n- apprenticeName (opcional)\n- ficha (opcional)"
+          }
+        },
+        {
+          "name": "Listar conversaciones",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/conversations",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "chat", "conversations"]
+            },
+            "description": "Devuelve las conversaciones del usuario autenticado (psicólogo o aprendiz)."
+          }
+        },
+        {
+          "name": "Historial de chat",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/history/{{appointmentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "chat", "history", "{{appointmentId}}"]
+            },
+            "description": "Obtiene los mensajes de una conversación. El usuario debe ser participante (psicólogo o aprendiz de esa conversación)."
+          }
+        }
+      ],
+      "description": "Rutas REST bajo /api/chat. Requieren JWT."
+    }
+  ]
+}

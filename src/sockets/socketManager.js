@@ -75,6 +75,28 @@ module.exports = (io) => {
       }
     });
 
+    socket.on('typing_start', (data) => {
+      const { appointmentId } = data || {};
+      if (!appointmentId) return;
+      const roomName = `cita_${appointmentId}`;
+      socket.to(roomName).emit('user_typing', {
+        appointmentId,
+        userId: socket.user.id,
+        isTyping: true
+      });
+    });
+
+    socket.on('typing_stop', (data) => {
+      const { appointmentId } = data || {};
+      if (!appointmentId) return;
+      const roomName = `cita_${appointmentId}`;
+      socket.to(roomName).emit('user_typing', {
+        appointmentId,
+        userId: socket.user.id,
+        isTyping: false
+      });
+    });
+
     socket.on('disconnect', () => {
       logger.debug('Cliente desconectado');
     });
