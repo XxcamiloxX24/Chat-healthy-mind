@@ -70,6 +70,18 @@ module.exports = (io) => {
         const savedMessage = await newMessage.save();
         const payload = savedMessage.toObject ? savedMessage.toObject() : savedMessage;
         io.to(roomName).emit('receive_message', { ...payload, appointmentId });
+
+        // Notificar al destinatario en su sala personal (para badge/toast cuando no está en el chat)
+        const recipientId = userId === chat.psychologistId ? chat.apprenticeId : chat.psychologistId;
+        const recipientRole = userId === chat.psychologistId ? 'Aprendiz' : 'Psicologo';
+        const preview = content.length > 50 ? content.slice(0, 50) + '...' : content;
+        io.to(`${recipientRole}_${recipientId}`).emit('notification', {
+          type: 'NEW_MESSAGE',
+          title: 'Nuevo mensaje',
+          message: preview,
+          appointmentId,
+          createdAt: new Date()
+        });
       } catch (error) {
         logger.error('Error guardando mensaje:', error);
       }
