@@ -11,6 +11,9 @@ router.post('/room', authMiddleware, requirePsychologist, chatController.createC
 // GET /conversations - Listar conversaciones del usuario
 router.get('/conversations', authMiddleware, chatController.getConversations);
 
+// GET /stats/mensajes-por-mes — agregado mensual de mensajes (solo psicólogo)
+router.get('/stats/mensajes-por-mes', authMiddleware, requirePsychologist, chatController.getMensajesPorMes);
+
 // GET /history/:appointmentId - Historial (solo JWT, debe ser participante)
 router.get('/history/:appointmentId', authMiddleware, requireChatParticipant, chatController.getChatHistory);
 

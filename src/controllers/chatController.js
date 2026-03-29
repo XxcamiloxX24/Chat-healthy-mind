@@ -101,3 +101,48 @@ exports.getChatHistory = async (req, res, next) => {
         next(error);
     }
 };
+
+/**
+ * GET /stats/mensajes-por-mes — conteo de mensajes por año/mes para las conversaciones del psicólogo (JWT).
+ */
+exports.getMensajesPorMes = async (req, res, next) => {
+    try {
+        const psychologistId = req.user.id;
+        if (psychologistId == null || Number.isNaN(psychologistId)) {
+            return res.status(401).json({ error: 'Usuario no identificado' });
+        }
+
+        let meses = parseInt(req.query.meses, 10);
+        if (Number.isNaN(meses) || meses < 1) meses = 6;
+        if (meses > 24) meses = 24;
+
+        const convs = await Conversation.find({ psychologistId }).select('_id').lean();
+        const convIds = convs.map((c) => c._id);
+        if (convIds.length === 0) {
+            return res.json([]);
+        }
+
+        const agg = await Message.aggregate([
+            { $match: { conversationId: { $in: convIds } } },
+            {
+                $group: {
+                    _id: { y: { $year: '$timestamp' }, m: { $month: '$timestamp' } },
+                    total: { $sum: 1 },
+                },
+            },
+            {
+                $project: {
+                    _id: 0,
+                    año: '$_id.y',
+                    mes: '$_id.m',
+                    total: 1,
+                },
+            },
+            { $sort: { año: 1, mes: 1 } },
+        ]);
+
+        res.json(agg);
+    } catch (error) {
+        next(error);
+    }
+};
