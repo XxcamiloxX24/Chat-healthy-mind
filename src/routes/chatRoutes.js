@@ -4,6 +4,43 @@ const router = express.Router();
 const chatController = require('../controllers/chatController');
 const { authMiddleware } = require('../middleware/auth');
 const { requirePsychologist, requireChatParticipant } = require('../middleware/chatAuth');
+const socketInstance = require('../sockets/socketInstance');
+const logger = require('../utils/logger');
+
+/**
+ * Llamada server-to-server desde la API .NET (p. ej. nueva solicitud de cita).
+ * POST /api/chat/internal/notify
+ * Header: X-Internal-Secret: <CHAT_INTERNAL_NOTIFY_SECRET>
+ * Body: { psychologistId, type?, title?, message?, appointmentId? }
+ */
+router.post('/internal/notify', (req, res) => {
+  const expected = process.env.CHAT_INTERNAL_NOTIFY_SECRET;
+  const sent = req.get('X-Internal-Secret') || req.get('x-internal-secret');
+  if (!expected || sent !== expected) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+
+  const { psychologistId, type, title, message, appointmentId } = req.body || {};
+  const pid = Number(psychologistId);
+  if (!Number.isFinite(pid) || pid <= 0) {
+    return res.status(400).json({ error: 'psychologistId_invalido' });
+  }
+
+  try {
+    const io = socketInstance.getIO();
+    const room = `Psicologo_${pid}`;
+    io.to(room).emit('notification', {
+      type: type || 'GENERIC',
+      title: title || 'Healthy Mind',
+      message: message || '',
+      appointmentId: appointmentId != null ? Number(appointmentId) : undefined,
+    });
+    return res.json({ ok: true });
+  } catch (e) {
+    logger.error('internal/notify socket error', e);
+    return res.status(500).json({ error: 'socket_error' });
+  }
+});
 
 // POST /room - Crear sala (solo psicólogo autenticado)
 router.post('/room', authMiddleware, requirePsychologist, chatController.createChatRoom);
