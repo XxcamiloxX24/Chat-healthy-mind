@@ -4,6 +4,30 @@ const Message = require('../models/Message');
 const Conversation = require('../models/Conversation');
 const logger = require('../utils/logger');
 
+const CLAIM_NAMEID = 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier';
+const CLAIM_ROLE = 'http://schemas.microsoft.com/ws/2008/06/identity/claims/role';
+
+/** ID numérico del usuario desde el payload JWT (.NET suele usar nameid/sub; a veces el URI largo). */
+function extractUserId(decoded) {
+  if (!decoded || typeof decoded !== 'object') return NaN;
+  const candidates = [decoded.nameid, decoded.sub, decoded[CLAIM_NAMEID]];
+  for (const c of candidates) {
+    if (c == null) continue;
+    const n = parseInt(String(c), 10);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return NaN;
+}
+
+/** Rol desde payload JWT (corto "role" o claim URI de .NET). */
+function extractRole(decoded) {
+  if (!decoded || typeof decoded !== 'object') return '';
+  let r = decoded.role ?? decoded[CLAIM_ROLE];
+  if (Array.isArray(r)) r = r[0];
+  if (typeof r === 'string') return r.trim();
+  return '';
+}
+
 module.exports = (io) => {
   io.use((socket, next) => {
     const token = socket.handshake.auth.token || socket.handshake.headers.token;
@@ -16,10 +40,10 @@ module.exports = (io) => {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       socket.user = decoded;
 
-      const userIdString = socket.user.nameid || socket.user.sub;
-      socket.user.id = parseInt(userIdString, 10);
+      socket.user.id = extractUserId(decoded);
+      socket.user.roleResolved = extractRole(decoded);
 
-      logger.debug('Token válido. Usuario ID:', socket.user.id);
+      logger.debug('Token válido. Usuario ID:', socket.user.id, 'rol:', socket.user.roleResolved);
       next();
     } catch (err) {
       logger.error('Token inválido:', err.message);
@@ -29,11 +53,24 @@ module.exports = (io) => {
 
   io.on('connection', (socket) => {
     const userId = socket.user.id;
-    const role = socket.user.role;
-    const personalRoom = `${role}_${userId}`;
-    socket.join(personalRoom);
+    const role = socket.user.roleResolved || socket.user.role || '';
+    const roomsToJoin = new Set();
 
-    logger.debug('Usuario unido a sala:', personalRoom);
+    if (role && Number.isFinite(userId) && userId > 0) {
+      roomsToJoin.add(`${role}_${userId}`);
+    }
+    // Salas canónicas (mismo formato que internal/notify y notificaciones de mensaje)
+    if (Number.isFinite(userId) && userId > 0) {
+      const r = role.toLowerCase();
+      if (r === 'psicologo') roomsToJoin.add(`Psicologo_${userId}`);
+      if (r === 'aprendiz') roomsToJoin.add(`Aprendiz_${userId}`);
+      if (r === 'administrador') roomsToJoin.add(`Administrador_${userId}`);
+    }
+
+    for (const room of roomsToJoin) {
+      socket.join(room);
+      logger.debug('Usuario unido a sala:', room);
+    }
 
     socket.on('join_chat', (data) => {
       const { appointmentId } = data;
@@ -52,10 +89,9 @@ module.exports = (io) => {
         const chat = await Conversation.findOne({ appointmentId });
         if (!chat) return;
 
-        const userIdString = socket.user.nameid;
-        const userId = parseInt(userIdString, 10);
+        const userId = socket.user.id;
 
-        if (isNaN(userId)) {
+        if (!Number.isFinite(userId) || userId <= 0) {
           logger.error('El ID del token no es un número válido');
           return;
         }

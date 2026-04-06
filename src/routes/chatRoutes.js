@@ -14,9 +14,14 @@ const logger = require('../utils/logger');
  * Body: { psychologistId, type?, title?, message?, appointmentId? }
  */
 router.post('/internal/notify', (req, res) => {
-  const expected = process.env.CHAT_INTERNAL_NOTIFY_SECRET;
-  const sent = req.get('X-Internal-Secret') || req.get('x-internal-secret');
-  if (!expected || sent !== expected) {
+  const expected = (process.env.CHAT_INTERNAL_NOTIFY_SECRET || '').trim();
+  const sent = (req.get('X-Internal-Secret') || req.get('x-internal-secret') || '').trim();
+  if (!expected) {
+    console.warn('[chat internal/notify] CHAT_INTERNAL_NOTIFY_SECRET no está definido en el servidor');
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+  if (sent !== expected) {
+    console.warn('[chat internal/notify] Secreto incorrecto (revisa que coincida con Chat:InternalNotifySecret de la API)');
     return res.status(401).json({ error: 'unauthorized' });
   }
 
@@ -29,13 +34,17 @@ router.post('/internal/notify', (req, res) => {
   try {
     const io = socketInstance.getIO();
     const room = `Psicologo_${pid}`;
+    const inRoom = io.sockets.adapter.rooms.get(room);
+    const clientCount = inRoom ? inRoom.size : 0;
     io.to(room).emit('notification', {
       type: type || 'GENERIC',
       title: title || 'Healthy Mind',
       message: message || '',
       appointmentId: appointmentId != null ? Number(appointmentId) : undefined,
     });
-    return res.json({ ok: true });
+    // Siempre a stdout (Render logs) aunque NODE_ENV=production
+    console.log(`[chat internal/notify] emit notification → room=${room} socketsEnSala=${clientCount} type=${type || 'GENERIC'}`);
+    return res.json({ ok: true, room, socketsEnSala: clientCount });
   } catch (e) {
     logger.error('internal/notify socket error', e);
     return res.status(500).json({ error: 'socket_error' });
