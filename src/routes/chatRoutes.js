@@ -25,7 +25,7 @@ router.post('/internal/notify', (req, res) => {
     return res.status(401).json({ error: 'unauthorized' });
   }
 
-  const { psychologistId, type, title, message, appointmentId } = req.body || {};
+  const { psychologistId, type, title, message, appointmentId, seguimientoId, deepLink } = req.body || {};
   const pid = Number(psychologistId);
   if (!Number.isFinite(pid) || pid <= 0) {
     return res.status(400).json({ error: 'psychologistId_invalido' });
@@ -36,12 +36,15 @@ router.post('/internal/notify', (req, res) => {
     const room = `Psicologo_${pid}`;
     const inRoom = io.sockets.adapter.rooms.get(room);
     const clientCount = inRoom ? inRoom.size : 0;
-    io.to(room).emit('notification', {
+    const payload = {
       type: type || 'GENERIC',
       title: title || 'Healthy Mind',
       message: message || '',
       appointmentId: appointmentId != null ? Number(appointmentId) : undefined,
-    });
+    };
+    if (seguimientoId != null) payload.seguimientoId = Number(seguimientoId);
+    if (deepLink) payload.deepLink = String(deepLink);
+    io.to(room).emit('notification', payload);
     // Siempre a stdout (Render logs) aunque NODE_ENV=production
     console.log(`[chat internal/notify] emit notification → room=${room} socketsEnSala=${clientCount} type=${type || 'GENERIC'}`);
     return res.json({ ok: true, room, socketsEnSala: clientCount });
