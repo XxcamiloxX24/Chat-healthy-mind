@@ -25,6 +25,10 @@ const ConversationSchema = new mongoose.Schema({
         type: Boolean,
         default: true // El chat nace activo
     },
+    archivedByPsychologist: {
+        type: Boolean,
+        default: false // True cuando el psicólogo "quita el chat" de su lista; el aprendiz lo sigue viendo
+    },
     createdAt: {
         type: Date,
         default: Date.now

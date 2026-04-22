@@ -19,6 +19,11 @@ exports.createChatRoom = async (req, res, next) => {
         let conversation = await Conversation.findOne({ appointmentId });
 
         if (conversation) {
+            // Si el psicólogo había "quitado" la sala de su lista, reactivarla para que vuelva a verse.
+            if (conversation.archivedByPsychologist) {
+                conversation.archivedByPsychologist = false;
+                await conversation.save();
+            }
             return res.status(200).json({
                 msg: 'La sala ya existía',
                 roomId: conversation._id,
@@ -66,8 +71,9 @@ exports.getConversations = async (req, res, next) => {
         const userId = req.user.id;
         const role = req.user.role;
 
+        // El psicólogo oculta salas archivadas; el aprendiz ve todas sus conversaciones.
         const filter = role === 'Psicologo'
-            ? { psychologistId: userId }
+            ? { psychologistId: userId, archivedByPsychologist: { $ne: true } }
             : role === 'Aprendiz'
                 ? { apprenticeId: userId }
                 : null;
@@ -105,6 +111,74 @@ exports.getChatHistory = async (req, res, next) => {
 /**
  * GET /stats/mensajes-por-mes — conteo de mensajes por año/mes para las conversaciones del psicólogo (JWT).
  */
+/**
+ * PATCH /conversations/:appointmentId/archive
+ * Marca la conversación como archivada para el psicólogo autenticado. Solo el dueño psicólogo puede archivar.
+ */
+exports.archiveConversationForPsychologist = async (req, res, next) => {
+    try {
+        const psychologistId = req.user.id;
+        const aptId = parseInt(req.params.appointmentId, 10);
+        if (Number.isNaN(aptId)) {
+            return res.status(400).json({ error: 'appointmentId inválido' });
+        }
+
+        const conversation = await Conversation.findOne({ appointmentId: aptId });
+        if (!conversation) {
+            return res.status(404).json({ error: 'No existe un chat para esta cita' });
+        }
+        if (conversation.psychologistId !== psychologistId) {
+            return res.status(403).json({ error: 'No puedes archivar una conversación ajena' });
+        }
+
+        conversation.archivedByPsychologist = true;
+        await conversation.save();
+
+        return res.json({ ok: true, appointmentId: aptId });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * DELETE /conversations/:appointmentId
+ * Borra permanentemente la conversación y todos sus mensajes. Solo el psicólogo dueño.
+ * Notifica al aprendiz por socket para que limpie su copia local.
+ */
+exports.deleteConversationPermanent = async (req, res, next) => {
+    try {
+        const psychologistId = req.user.id;
+        const aptId = parseInt(req.params.appointmentId, 10);
+        if (Number.isNaN(aptId)) {
+            return res.status(400).json({ error: 'appointmentId inválido' });
+        }
+
+        const conversation = await Conversation.findOne({ appointmentId: aptId });
+        if (!conversation) {
+            return res.status(404).json({ error: 'No existe un chat para esta cita' });
+        }
+        if (conversation.psychologistId !== psychologistId) {
+            return res.status(403).json({ error: 'No puedes eliminar una conversación ajena' });
+        }
+
+        await Message.deleteMany({ conversationId: conversation._id });
+        await Conversation.deleteOne({ _id: conversation._id });
+
+        try {
+            const io = socketInstance.getIO();
+            io.to(`Aprendiz_${conversation.apprenticeId}`).emit('conversation_removed', {
+                appointmentId: aptId,
+            });
+        } catch (e) {
+            logger.warn('No se pudo notificar al aprendiz sobre la eliminación del chat', e?.message ?? e);
+        }
+
+        return res.json({ ok: true, appointmentId: aptId });
+    } catch (error) {
+        next(error);
+    }
+};
+
 exports.getMensajesPorMes = async (req, res, next) => {
     try {
         const psychologistId = req.user.id;

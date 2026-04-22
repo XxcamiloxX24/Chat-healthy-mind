@@ -60,6 +60,22 @@ router.post('/room', authMiddleware, requirePsychologist, chatController.createC
 // GET /conversations - Listar conversaciones del usuario
 router.get('/conversations', authMiddleware, chatController.getConversations);
 
+// PATCH /conversations/:appointmentId/archive - Archivar conversación para el psicólogo (oculta de su lista)
+router.patch(
+    '/conversations/:appointmentId/archive',
+    authMiddleware,
+    requirePsychologist,
+    chatController.archiveConversationForPsychologist
+);
+
+// DELETE /conversations/:appointmentId - Borrado permanente (mensajes + conversación)
+router.delete(
+    '/conversations/:appointmentId',
+    authMiddleware,
+    requirePsychologist,
+    chatController.deleteConversationPermanent
+);
+
 // GET /stats/mensajes-por-mes — agregado mensual de mensajes (solo psicólogo)
 router.get('/stats/mensajes-por-mes', authMiddleware, requirePsychologist, chatController.getMensajesPorMes);
 
